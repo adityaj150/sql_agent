@@ -20,7 +20,6 @@ from langchain_community.utilities import SQLDatabase
 from langchain_openai import ChatOpenAI
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
-from langchain.agents.agent_types import AgentType
 
 load_dotenv()
 
@@ -88,7 +87,7 @@ def build_agent(db_path: str, read_only: bool = True):
     agent = create_sql_agent(
         llm=llm,
         toolkit=toolkit,
-        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+        agent_type="openai-tools",
         verbose=False,
     )
     return agent, db

@@ -7,3 +7,6 @@ pypdf==4.2.0
 
 sentence-transformers
 faiss-cpu
+
+ragas
+datasets
