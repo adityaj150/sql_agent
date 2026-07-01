@@ -20,6 +20,46 @@ def create_router():
     # This chain will output a JSON string
     return prompt | llm
 
+def init_system(db_path="data/demo.sqlite"):
+    if db_path == "data/demo.sqlite" and not os.path.exists("data/demo.sqlite"):
+        os.makedirs("data", exist_ok=True)
+        create_demo_database("data/demo.sqlite")
+    sql_agent, _ = build_agent(db_path)
+    rag_agent = build_rag_agent()
+    router = create_router()
+    return sql_agent, rag_agent, router
+
+def ask_multi_agent(q, sql_agent, rag_agent, router):
+    try:
+        route_res = router.invoke({"question": q}).content
+        route_res = route_res.replace('```json', '').replace('```', '').strip()
+        route = json.loads(route_res).get("route", "rag")
+    except Exception:
+        route = "rag"
+        
+    route = str(route).lower().strip()
+    
+    if route == "sql":
+        try:
+            res = sql_agent.invoke({"input": q})
+            return route, res["output"]
+        except Exception as e:
+            try:
+                res = rag_agent.invoke({"input": q})
+                return "rag (fallback from sql)", res["answer"]
+            except Exception as e2:
+                return "error", f"Both agents failed. SQL Error: {e}, RAG Error: {e2}"
+    else:
+        try:
+            res = rag_agent.invoke({"input": q})
+            return route, res["answer"]
+        except Exception as e:
+            try:
+                res = sql_agent.invoke({"input": q})
+                return "sql (fallback from rag)", res["output"]
+            except Exception as e2:
+                return "error", f"Both agents failed. RAG Error: {e}, SQL Error: {e2}"
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Agent Master Router")
     parser.add_argument("--db", default="data/demo.sqlite", help="SQLite database path")
@@ -27,69 +67,18 @@ def main():
     args = parser.parse_args()
     
     print("Loading Multi-Agent System...")
-    
-    # Ensure the data directory and dummy DB exist for the SQL agent
-    if args.db == "data/demo.sqlite" and not os.path.exists("data/demo.sqlite"):
-        os.makedirs("data", exist_ok=True)
-        create_demo_database("data/demo.sqlite")
-        
-    print("  -> Initializing SQL Agent (Structured Data)...")
     try:
-        sql_agent, _ = build_agent(args.db)
+        sql_agent, rag_agent, router = init_system(args.db)
     except Exception as e:
-        print(f"Error loading SQL Agent: {e}")
+        print(f"Error initializing system: {e}")
         return
-        
-    print("  -> Initializing RAG Agent (Unstructured Documents)...")
-    try:
-        rag_agent = build_rag_agent()
-    except Exception as e:
-        print(f"Error loading RAG Agent: {e}")
-        return
-        
-    print("  -> Initializing Master Router...")
-    router = create_router()
     
     print("\n[OK] Multi-Agent System Ready!")
     
     def process_query(q):
-        # 1. Ask the LLM where this question should go
-        try:
-            route_res = router.invoke({"question": q}).content
-            # Clean up potential markdown formatting from the LLM output
-            route_res = route_res.replace('```json', '').replace('```', '').strip()
-            route = json.loads(route_res).get("route", "rag")
-        except Exception:
-            # Fallback if the LLM hallucinates raw text like 'SQL' instead of JSON
-            route = "rag"
-            
-        route = str(route).lower().strip()
-        
+        route, ans = ask_multi_agent(q, sql_agent, rag_agent, router)
         print(f"  [Router Decision: Sending query to the {route.upper()} Agent]")
-        
-        # 2. Hand the query to the chosen expert agent with fallback support
-        if route == "sql":
-            try:
-                res = sql_agent.invoke({"input": q})
-                return res["output"]
-            except Exception as e:
-                print(f"  [SQL Agent failed: {e}. Falling back to RAG Agent...]")
-                try:
-                    res = rag_agent.invoke({"input": q})
-                    return res["answer"]
-                except Exception as e2:
-                    return f"Both agents failed. SQL Error: {e}, RAG Error: {e2}"
-        else:
-            try:
-                res = rag_agent.invoke({"input": q})
-                return res["answer"]
-            except Exception as e:
-                print(f"  [RAG Agent failed: {e}. Falling back to SQL Agent...]")
-                try:
-                    res = sql_agent.invoke({"input": q})
-                    return res["output"]
-                except Exception as e2:
-                    return f"Both agents failed. RAG Error: {e}, SQL Error: {e2}"
+        return ans
             
     if args.question:
         print(f"\nUser: {args.question}")
