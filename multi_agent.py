@@ -6,6 +6,30 @@ from agent import build_agent, create_demo_database
 from rag_agent import build_rag_agent
 from compressor import get_llm
 
+def format_rag_citations(rag_res):
+    """Extracts metadata from the RAG context and appends it as formatted citations."""
+    ans = rag_res.get("answer", "")
+    context = rag_res.get("context", [])
+    if not context:
+        return ans
+        
+    sources = set()
+    for doc in context:
+        source_val = doc.metadata.get("source", "Unknown Document")
+        basename = os.path.basename(source_val)
+        page = doc.metadata.get("page")
+        
+        if page is not None:
+            # PDF pages are 0-indexed in Langchain
+            sources.add(f"{basename} (Page {page + 1})")
+        else:
+            sources.add(basename)
+            
+    if sources:
+        ans += "\n\n**Sources:**\n" + "\n".join([f"- `{s}`" for s in sources])
+        
+    return ans
+
 def create_router():
     """Builds a simple LLM router to classify user intent as structured (SQL), unstructured (RAG), both, or general."""
     llm = get_llm()
@@ -70,16 +94,34 @@ def ask_multi_agent(q, sql_agent, rag_agent, router, chat_history_str=""):
         # Create a targeted query for the RAG agent using the SQL context!
         llm = get_llm()
         rag_query_prompt = PromptTemplate.from_template(
-            "Original Question: {question}\n"
-            "Database Answer: {sql_answer}\n"
-            "Based on the database answer, formulate a targeted search query to look up the relevant company policies needed to fully answer the original question (e.g. refund policies for specific products). Output ONLY the search query."
+            "User's multi-part question: {question}\n"
+            "We already queried the SQL database and found this: {sql_answer}\n\n"
+            "Your task: Formulate a targeted search query to look up the remaining unanswered parts of the user's question in the company documents. "
+            "If the remaining part depends on the SQL answer (e.g. a specific product), include that context. "
+            "Output ONLY the search query, without any quotes or preamble."
         )
         rag_q = (rag_query_prompt | llm).invoke({"question": agent_q, "sql_answer": sql_ans}).content.strip()
         
         rag_ans = "Failed to fetch RAG data."
+        rag_citations = ""
         try:
             rag_res = rag_agent.invoke({"input": rag_q})
             rag_ans = rag_res["answer"]
+            
+            # Extract citations for the Combiner to append at the end
+            context = rag_res.get("context", [])
+            sources = set()
+            for doc in context:
+                source_val = doc.metadata.get("source", "Unknown Document")
+                basename = os.path.basename(source_val)
+                page = doc.metadata.get("page")
+                if page is not None:
+                    sources.add(f"{basename} (Page {page + 1})")
+                else:
+                    sources.add(basename)
+            if sources:
+                rag_citations = "\n\n**Sources:**\n" + "\n".join([f"- `{s}`" for s in sources])
+                
         except Exception as e:
             rag_ans = f"RAG Agent error: {e}"
             
@@ -93,7 +135,8 @@ def ask_multi_agent(q, sql_agent, rag_agent, router, chat_history_str=""):
         chain = combiner_prompt | llm
         try:
             final_ans = chain.invoke({"question": agent_q, "sql_answer": sql_ans, "rag_answer": rag_ans}).content
-            return route, final_ans
+            # Append citations to the final synthesized answer
+            return route, final_ans + rag_citations
         except Exception as e:
             return "error", f"Combiner LLM failed: {e}"
 
@@ -104,13 +147,13 @@ def ask_multi_agent(q, sql_agent, rag_agent, router, chat_history_str=""):
         except Exception as e:
             try:
                 res = rag_agent.invoke({"input": agent_q})
-                return "rag (fallback from sql)", res["answer"]
+                return "rag (fallback from sql)", format_rag_citations(res)
             except Exception as e2:
                 return "error", f"Both agents failed. SQL Error: {e}, RAG Error: {e2}"
     else:
         try:
             res = rag_agent.invoke({"input": agent_q})
-            return route, res["answer"]
+            return route, format_rag_citations(res)
         except Exception as e:
             try:
                 res = sql_agent.invoke({"input": agent_q})
