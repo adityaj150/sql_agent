@@ -81,8 +81,15 @@ if prompt := st.chat_input("What is your question?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     with st.spinner("Agent is thinking..."):
+        # Format the last 6 messages as chat history so the agent understands follow-ups
+        history_str = ""
+        recent_messages = st.session_state.messages[-7:-1] # Exclude the prompt we just added
+        for m in recent_messages:
+            role = "User" if m["role"] == "user" else "Assistant"
+            history_str += f"{role}: {m['content']}\n"
+            
         # The magic happens here!
-        route, response = ask_multi_agent(prompt, sql_agent, rag_agent, router)
+        route, response = ask_multi_agent(prompt, sql_agent, rag_agent, router, history_str)
         
     # Display assistant response in chat message container
     with st.chat_message("assistant"):

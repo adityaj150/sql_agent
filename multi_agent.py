@@ -31,9 +31,14 @@ def init_system(db_path="data/demo.sqlite"):
     router = create_router()
     return sql_agent, rag_agent, router
 
-def ask_multi_agent(q, sql_agent, rag_agent, router):
+def ask_multi_agent(q, sql_agent, rag_agent, router, chat_history_str=""):
+    # Inject chat history into the Router's classification prompt so it understands follow-ups
+    router_q = q
+    if chat_history_str:
+        router_q = f"Previous Chat History:\n{chat_history_str}\n\nLatest Question: {q}"
+        
     try:
-        route_res = router.invoke({"question": q}).content
+        route_res = router.invoke({"question": router_q}).content
         route_res = route_res.replace('```json', '').replace('```', '').strip()
         route = json.loads(route_res).get("route", "rag")
     except Exception:
@@ -41,10 +46,15 @@ def ask_multi_agent(q, sql_agent, rag_agent, router):
         
     route = str(route).lower().strip()
     
+    # Inject chat history into the Agents' prompts so they can answer follow-ups correctly
+    agent_q = q
+    if chat_history_str:
+        agent_q = f"Previous Chat History:\n{chat_history_str}\n\nLatest Question: {q}"
+    
     if route == "general":
         try:
             llm = get_llm()
-            res = llm.invoke(q)
+            res = llm.invoke(agent_q)
             return route, res.content
         except Exception as e:
             return "error", f"General LLM failed: {e}"
@@ -52,7 +62,7 @@ def ask_multi_agent(q, sql_agent, rag_agent, router):
     elif route == "both":
         sql_ans = "Failed to fetch SQL data."
         try:
-            sql_res = sql_agent.invoke({"input": q})
+            sql_res = sql_agent.invoke({"input": agent_q})
             sql_ans = sql_res["output"]
         except Exception as e:
             sql_ans = f"SQL Agent error: {e}"
@@ -64,7 +74,7 @@ def ask_multi_agent(q, sql_agent, rag_agent, router):
             "Database Answer: {sql_answer}\n"
             "Based on the database answer, formulate a targeted search query to look up the relevant company policies needed to fully answer the original question (e.g. refund policies for specific products). Output ONLY the search query."
         )
-        rag_q = (rag_query_prompt | llm).invoke({"question": q, "sql_answer": sql_ans}).content.strip()
+        rag_q = (rag_query_prompt | llm).invoke({"question": agent_q, "sql_answer": sql_ans}).content.strip()
         
         rag_ans = "Failed to fetch RAG data."
         try:
@@ -82,28 +92,28 @@ def ask_multi_agent(q, sql_agent, rag_agent, router):
         )
         chain = combiner_prompt | llm
         try:
-            final_ans = chain.invoke({"question": q, "sql_answer": sql_ans, "rag_answer": rag_ans}).content
+            final_ans = chain.invoke({"question": agent_q, "sql_answer": sql_ans, "rag_answer": rag_ans}).content
             return route, final_ans
         except Exception as e:
             return "error", f"Combiner LLM failed: {e}"
 
     elif route == "sql":
         try:
-            res = sql_agent.invoke({"input": q})
+            res = sql_agent.invoke({"input": agent_q})
             return route, res["output"]
         except Exception as e:
             try:
-                res = rag_agent.invoke({"input": q})
+                res = rag_agent.invoke({"input": agent_q})
                 return "rag (fallback from sql)", res["answer"]
             except Exception as e2:
                 return "error", f"Both agents failed. SQL Error: {e}, RAG Error: {e2}"
     else:
         try:
-            res = rag_agent.invoke({"input": q})
+            res = rag_agent.invoke({"input": agent_q})
             return route, res["answer"]
         except Exception as e:
             try:
-                res = sql_agent.invoke({"input": q})
+                res = sql_agent.invoke({"input": agent_q})
                 return "sql (fallback from rag)", res["output"]
             except Exception as e2:
                 return "error", f"Both agents failed. RAG Error: {e}, SQL Error: {e2}"
