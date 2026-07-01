@@ -34,7 +34,7 @@ def load_documents(docs_dir: str = "documents"):
             
     return documents
 
-if __name__ == "__main__":
+def run_ingestion():
     print("Starting document ingestion pipeline...")
     docs = load_documents()
     
@@ -52,5 +52,10 @@ if __name__ == "__main__":
         save_bm25_retriever(chunks)
         
         print("Ingestion complete!")
+        return True
     else:
         print(f"No documents found in the 'documents/' directory.")
+        return False
+
+if __name__ == "__main__":
+    run_ingestion()

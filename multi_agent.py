@@ -7,14 +7,16 @@ from rag_agent import build_rag_agent
 from compressor import get_llm
 
 def create_router():
-    """Builds a simple LLM router to classify user intent as structured (SQL) or unstructured (RAG)."""
+    """Builds a simple LLM router to classify user intent as structured (SQL), unstructured (RAG), both, or general."""
     llm = get_llm()
     prompt = PromptTemplate.from_template(
         "You are an intelligent router for a company assistant. "
-        "Your job is to classify the user's question into one of two categories:\n"
+        "Your job is to classify the user's question into one of four categories:\n"
         "1. 'sql' - The question requires querying a relational database (e.g. sales, revenue, users, customers, products, orders).\n"
         "2. 'rag' - The question requires looking up unstructured documents (e.g. policies, office locations, rules, guidelines, text).\n"
-        "Output ONLY a valid JSON object with a single key 'route' and value either 'sql' or 'rag'. Do not output any other text or markdown.\n\n"
+        "3. 'both' - The question bridges both domains (e.g. 'Which country generated the most revenue and what is our refund policy there?').\n"
+        "4. 'general' - A general conversational question or greeting (e.g. 'Hi', 'Who are you?').\n"
+        "Output ONLY a valid JSON object with a single key 'route' and value 'sql', 'rag', 'both', or 'general'. Do not output any other text or markdown.\n\n"
         "Question: {question}"
     )
     # This chain will output a JSON string
@@ -39,7 +41,53 @@ def ask_multi_agent(q, sql_agent, rag_agent, router):
         
     route = str(route).lower().strip()
     
-    if route == "sql":
+    if route == "general":
+        try:
+            llm = get_llm()
+            res = llm.invoke(q)
+            return route, res.content
+        except Exception as e:
+            return "error", f"General LLM failed: {e}"
+            
+    elif route == "both":
+        sql_ans = "Failed to fetch SQL data."
+        try:
+            sql_res = sql_agent.invoke({"input": q})
+            sql_ans = sql_res["output"]
+        except Exception as e:
+            sql_ans = f"SQL Agent error: {e}"
+            
+        # Create a targeted query for the RAG agent using the SQL context!
+        llm = get_llm()
+        rag_query_prompt = PromptTemplate.from_template(
+            "Original Question: {question}\n"
+            "Database Answer: {sql_answer}\n"
+            "Based on the database answer, formulate a targeted search query to look up the relevant company policies needed to fully answer the original question (e.g. refund policies for specific products). Output ONLY the search query."
+        )
+        rag_q = (rag_query_prompt | llm).invoke({"question": q, "sql_answer": sql_ans}).content.strip()
+        
+        rag_ans = "Failed to fetch RAG data."
+        try:
+            rag_res = rag_agent.invoke({"input": rag_q})
+            rag_ans = rag_res["answer"]
+        except Exception as e:
+            rag_ans = f"RAG Agent error: {e}"
+            
+        combiner_prompt = PromptTemplate.from_template(
+            "You are an intelligent synthesis assistant. You have received answers from two expert systems regarding the user's question.\n\n"
+            "User's Question: {question}\n\n"
+            "SQL Agent (Database) Answer:\n{sql_answer}\n\n"
+            "RAG Agent (Documents) Answer:\n{rag_answer}\n\n"
+            "Please synthesize these into a single, cohesive, and helpful response."
+        )
+        chain = combiner_prompt | llm
+        try:
+            final_ans = chain.invoke({"question": q, "sql_answer": sql_ans, "rag_answer": rag_ans}).content
+            return route, final_ans
+        except Exception as e:
+            return "error", f"Combiner LLM failed: {e}"
+
+    elif route == "sql":
         try:
             res = sql_agent.invoke({"input": q})
             return route, res["output"]
