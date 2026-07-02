@@ -10,3 +10,7 @@ faiss-cpu
 
 ragas
 datasets
+
+streamlit
+watchdog
+rank_bm25

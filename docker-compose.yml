@@ -1,0 +1,13 @@
+services:
+  multi-agent:
+    build: .
+    container_name: multi-agent-app
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      # Mount data and documents so uploaded files persist across container restarts
+      - ./data:/app/data
+      - ./documents:/app/documents
+    restart: unless-stopped
