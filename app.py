@@ -17,13 +17,17 @@ if "db_path" not in st.session_state:
 # Use st.cache_resource so we only load the heavy ML models and DB connections once!
 @st.cache_resource(show_spinner="Booting up AI Agents...")
 def load_agents(db_path):
+    if not os.path.exists("faiss_index") or not os.path.exists("bm25_index.pkl"):
+        print("Indices missing! Running automatic ingestion...")
+        run_ingestion()
     return init_system(db_path)
 
+agents_loaded = False
 try:
     sql_agent, rag_agent, router = load_agents(st.session_state.db_path)
+    agents_loaded = True
 except Exception as e:
-    st.error(f"Failed to initialize agents: {e}")
-    st.stop()
+    st.warning(f"Waiting for data: {e} Please use the sidebar to upload a Document and a Database!")
 
 st.title("Multi-Agent AI Assistant 🤖")
 st.markdown("Ask a question about our structured database (SQL) or unstructured documents (RAG). The Master Router will automatically decide which expert agent to use!")
@@ -72,33 +76,34 @@ for message in st.session_state.messages:
         if "route" in message:
             st.caption(f"🧠 *Routed via {message['route'].upper()} Agent*")
 
-# React to user input
-if prompt := st.chat_input("What is your question?"):
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
+if agents_loaded:
+    # React to user input
+    if prompt := st.chat_input("What is your question?"):
+        # Display user message in chat message container
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.spinner("Agent is thinking..."):
-        # Format the last 6 messages as chat history so the agent understands follow-ups
-        history_str = ""
-        recent_messages = st.session_state.messages[-7:-1] # Exclude the prompt we just added
-        for m in recent_messages:
-            role = "User" if m["role"] == "user" else "Assistant"
-            history_str += f"{role}: {m['content']}\n"
+        with st.spinner("Agent is thinking..."):
+            # Format the last 6 messages as chat history so the agent understands follow-ups
+            history_str = ""
+            recent_messages = st.session_state.messages[-7:-1] # Exclude the prompt we just added
+            for m in recent_messages:
+                role = "User" if m["role"] == "user" else "Assistant"
+                history_str += f"{role}: {m['content']}\n"
+                
+            # The magic happens here!
+            route, response = ask_multi_agent(prompt, sql_agent, rag_agent, router, history_str)
             
-        # The magic happens here!
-        route, response = ask_multi_agent(prompt, sql_agent, rag_agent, router, history_str)
-        
-    # Display assistant response in chat message container
-    with st.chat_message("assistant"):
-        st.markdown(response)
-        st.caption(f"🧠 *Routed via {route.upper()} Agent*")
-        
-    # Add assistant response to chat history
-    st.session_state.messages.append({
-        "role": "assistant", 
-        "content": response, 
-        "route": route
-    })
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            st.markdown(response)
+            st.caption(f"🧠 *Routed via {route.upper()} Agent*")
+            
+        # Add assistant response to chat history
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": response, 
+            "route": route
+        })
