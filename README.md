@@ -1,103 +1,355 @@
-# Multi-Agent AI Assistant (SQL + RAG)
+# 🤖 Multi-Agent AI Assistant (SQL + RAG)
 
-A full-stack, production-ready AI Assistant that intelligently routes user queries between a structured SQL database expert and an unstructured RAG (Retrieval-Augmented Generation) document expert. 
+A **production-ready Multi-Agent AI Assistant** that intelligently routes user queries between a structured **SQL Database Agent** and an unstructured **RAG (Retrieval-Augmented Generation) Document Agent**.
 
-Built with **LangChain**, **Streamlit**, **OpenAI**, and **FAISS**, this system is designed to dynamically decide which data source is needed to answer a user's question, execute the retrieval, and return a synthesized response with exact page citations.
+Built with **LangChain**, **Streamlit**, **OpenAI/OpenRouter**, **FAISS**, and **SQLite**, this system automatically determines which data source is required, retrieves the relevant information, and returns an accurate response with source citations.
 
-## 🌟 Key Features
+---
 
-- **LLM Master Router**: Uses few-shot prompting to analyze the user's intent and dynamically route the query to either the SQL Agent, the RAG Agent, or a combined "BOTH" routing pipeline.
-- **SQL Agent**: Connects to a local SQLite database, automatically inspects the schema, writes syntactically correct SQL queries, executes them, and formats the output into natural language.
-- **RAG Agent (with Context Compression)**: Processes unstructured PDFs and Markdown documents. It uses a dual-retrieval system:
-  - **FAISS Vector Store**: For dense semantic similarity search.
-  - **BM25**: For sparse keyword search.
-  - **Cross-Encoder Reranker**: Compresses and reranks the combined results to ensure the LLM only receives the most highly relevant chunks, avoiding token overflow and hallucinations.
-- **Dynamic File Uploads**: Users can upload new SQLite databases and PDF/Markdown documents directly through the Streamlit UI. The system automatically ingests and builds the FAISS/BM25 indices on the fly.
-- **Conversation Memory**: Maintains a rolling chat history window to allow for conversational follow-up questions.
-- **Dockerized**: Fully containerized for easy deployment to cloud platforms like Hugging Face Spaces.
+# 🚀 Live Demo
 
-## 🏗️ Architecture
+🔗 **Try the application here:**
+
+https://adee1502-multi-agent-rag-sql-assistant.hf.space
+
+> Upload your own SQLite database and company documents (PDF/Markdown) and start asking questions instantly.
+
+---
+
+# 🌟 Key Features
+
+- 🧠 **LLM Master Router**
+  - Uses few-shot prompting to classify user queries into:
+    - SQL
+    - RAG
+    - BOTH
+    - General
+
+- 🗄️ **SQL Agent**
+  - Connects to SQLite databases
+  - Automatically inspects schema
+  - Generates SQL queries
+  - Executes queries
+  - Converts SQL output into natural language
+
+- 📄 **Advanced RAG Agent**
+  - Supports PDF, Markdown and TXT documents
+  - Context-aware chunking
+  - Hybrid Retrieval:
+    - FAISS Semantic Search
+    - BM25 Keyword Search
+  - Cross Encoder Re-ranking
+  - Context Compression
+  - LLM Answer Generation
+
+- 🔀 **Advanced Multi-Agent Routing**
+  - Routes questions to:
+    - SQL Agent
+    - RAG Agent
+    - Both Agents
+    - General LLM
+  - Sequential orchestration for combined SQL + RAG queries.
+
+- 📂 **Dynamic File Uploads**
+  - Upload SQLite databases
+  - Upload PDF documents
+  - Upload Markdown files
+  - Upload Text files
+  - Automatic indexing after upload
+
+- 💬 **Conversation Memory**
+  - Supports follow-up questions
+  - Maintains recent conversation context
+
+- 📚 **Source Citations**
+  - Displays document name
+  - Displays page number
+  - Improves transparency and trust
+
+- 🐳 **Dockerized**
+  - Ready for Docker deployment
+  - Compatible with Hugging Face Spaces
+  - Easily deployable to Render/Railway
+
+---
+
+# 🛠️ Tech Stack
+
+| Category | Technology |
+|-----------|------------|
+| Frontend | Streamlit |
+| Backend | Python |
+| LLM Framework | LangChain |
+| LLM | GPT-4o-mini / OpenRouter |
+| Database | SQLite |
+| Vector Store | FAISS |
+| Embeddings | HuggingFace Sentence Transformers (all-mpnet-base-v2) |
+| Retrieval | FAISS + BM25 Hybrid Retrieval |
+| Re-ranking | Cross Encoder (MS MARCO) |
+| Context Compression | LangChain Contextual Compression |
+| Deployment | Docker, Hugging Face Spaces |
+
+---
+
+# 🏗️ Architecture
 
 ```mermaid
 graph TD
-    User([User Prompt]) --> UI[Streamlit UI]
-    UI --> Router[Master LLM Router]
-    
-    Router -- "SQL Intent" --> SQL[SQL Agent]
-    Router -- "RAG Intent" --> RAG[RAG Agent]
-    Router -- "Combined Intent" --> Both[BOTH Pipeline]
-    
-    SQL --> DB[(SQLite DB)]
-    
-    RAG --> BM25[BM25 Keyword Search]
-    RAG --> FAISS[FAISS Semantic Search]
-    BM25 --> Rerank[Cross-Encoder Reranker]
-    FAISS --> Rerank
-    Rerank --> LLM[OpenAI LLM]
-    
-    Both --> SQL
-    Both --> RAG
+
+User([User Question])
+
+User --> UI[Streamlit UI]
+
+UI --> Router[Master Router]
+
+Router --> SQLAgent[SQL Agent]
+Router --> RAGAgent[RAG Agent]
+Router --> BOTH[BOTH Pipeline]
+Router --> General[General LLM]
+
+SQLAgent --> SQLite[(SQLite Database)]
+
+RAGAgent --> Chunking[Context-aware Chunking]
+Chunking --> Embeddings[HuggingFace Embeddings]
+Embeddings --> FAISS[FAISS]
+Embeddings --> BM25[BM25]
+FAISS --> Hybrid[Hybrid Retrieval]
+BM25 --> Hybrid
+Hybrid --> CrossEncoder[Cross Encoder Re-ranking]
+CrossEncoder --> Compression[Context Compression]
+Compression --> LLM[OpenAI]
+
+BOTH --> SQLAgent
+BOTH --> RAGAgent
+SQLAgent --> Combiner[Response Combiner]
+RAGAgent --> Combiner
+Combiner --> User
 ```
 
-## 🚀 Local Setup
+---
 
-### 1. Prerequisites
-- Python 3.10+
-- An OpenAI API Key (or an OpenRouter API key)
+# 🔄 Combined Query Pipeline
 
-### 2. Installation
-Clone the repository and install the dependencies:
+For questions requiring both structured and unstructured data:
+
+```
+User Question
+
+↓
+
+Master Router
+
+↓
+
+SQL Agent
+
+↓
+
+Extract Structured Information
+
+↓
+
+Generate Targeted RAG Query
+
+↓
+
+RAG Agent
+
+↓
+
+Combine SQL + RAG Responses
+
+↓
+
+Final Answer
+```
+
+---
+
+# 📂 Supported Uploads
+
+### Documents
+
+- PDF
+- Markdown (.md)
+- Text (.txt)
+
+### Databases
+
+- SQLite (.sqlite)
+- SQLite (.db)
+
+---
+
+# 💬 Example Queries
+
+## SQL Agent
+
+- Which customer spent the most?
+- What is the total revenue?
+- Show the top-selling products.
+- Which country generated the highest sales?
+
+---
+
+## RAG Agent
+
+- What is the company's refund policy?
+- Where is the European office?
+- What benefits do employees receive?
+- What is the travel reimbursement policy?
+
+---
+
+## Combined (SQL + RAG)
+
+- Who spent the most money and is the purchased product refundable?
+- Which country generated the highest revenue and what is the company's refund policy there?
+- What product did Alice purchase and what is the return policy for that product?
+
+---
+
+# 🚀 Local Setup
+
+## 1. Clone Repository
+
 ```bash
 git clone https://github.com/your-username/sql_agent.git
+
 cd sql_agent
+```
+
+---
+
+## 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 3. Environment Variables
-Create a `.env` file in the root directory and add your API key:
+---
+
+## 3. Configure Environment Variables
+
+Create a `.env` file.
+
 ```env
-OPENAI_API_KEY=sk-proj-YOUR_API_KEY
-# If using OpenRouter, also add:
-# OPENAI_API_BASE=https://openrouter.ai/api/v1
+OPENAI_API_KEY=your_api_key
+
+# Optional (OpenRouter)
+OPENAI_API_BASE=https://openrouter.ai/api/v1
 ```
 
-### 4. Run the Application
+---
+
+## 4. Run the Application
+
 ```bash
 streamlit run app.py
 ```
-The application will be available at `http://localhost:8501`.
 
-## 🐳 Docker Setup
+The application will start at `http://localhost:8501`
 
-You can run the entire system in a Docker container using the provided `docker-compose.yml`.
+---
+
+# 🐳 Docker Setup
+
+Build and run the application:
 
 ```bash
 docker-compose up --build
 ```
 
-## ☁️ Hugging Face Spaces Deployment
+The application will be available at `http://localhost:8501`
 
-This project is configured to run instantly on Hugging Face Spaces as a Docker Template.
+---
 
-1. Create a new Hugging Face Space (Select **Docker** as the Space SDK).
-2. Upload the project files directly to the Space.
-3. Go to the **Settings** tab in your Space.
-4. Under **Variables and secrets**, add a New Secret:
-   - Name: `OPENAI_API_KEY`
-   - Value: `your-api-key`
-5. The container will automatically build and start the Streamlit UI.
+# ☁️ Hugging Face Spaces Deployment
 
-*(Note: The `Dockerfile` is already pre-configured to disable Streamlit's XSRF and CORS protections to comply with Hugging Face's reverse proxy requirements).*
+This project is fully compatible with Hugging Face Spaces.
 
-## 📁 Project Structure
+### Steps
 
-- `app.py`: The Streamlit web interface and session state manager.
-- `multi_agent.py`: The Master Router and the combined "BOTH" routing logic.
-- `agent.py`: The SQL Agent implementation.
-- `rag_agent.py`: The RAG generation implementation.
-- `ingest.py`: Pipeline for loading PDFs and Markdown files.
-- `chunking.py`: Logic for splitting documents into overlapping chunks.
-- `embeddings.py`: FAISS vector database construction.
-- `retriever.py`: BM25 keyword index construction.
-- `compressor.py`: Cross-Encoder implementation for reranking documents.
-- `Dockerfile` / `docker-compose.yml`: Containerization configuration.
+1. Create a new Hugging Face Space.
+2. Select **Docker** as the SDK.
+3. Upload the repository.
+4. Go to **Settings → Variables and Secrets**.
+5. Add `OPENAI_API_KEY` with your API key. (And `OPENAI_API_BASE` if using OpenRouter).
+
+The Docker container will automatically build and launch the Streamlit application.
+
+---
+
+# 📁 Project Structure
+
+```
+project/
+
+│
+├── app.py                  # Streamlit UI
+├── multi_agent.py          # Master Router
+├── agent.py                # SQL Agent
+├── rag_agent.py            # RAG Agent
+│
+├── ingest.py               # Document ingestion
+├── chunking.py             # Context-aware chunking
+├── embeddings.py           # Embeddings Model
+├── retriever.py            # Hybrid retrieval
+├── reranker.py             # Cross Encoder
+├── compressor.py           # Context compression
+│
+├── documents/              # Uploaded documents
+├── data/                   # SQLite databases
+├── vectorstore/            # FAISS indices
+│
+├── evaluator.py            # RAGAS evaluation
+├── test_retrieval.py       # Retrieval testing script
+├── metadata.yml            # System metadata
+├── task.md                 # Developer task list
+│
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
+```
+
+---
+
+# ⚡ Production Features
+
+- ✅ Intelligent Multi-Agent Routing
+- ✅ SQL Query Agent
+- ✅ Advanced RAG Pipeline
+- ✅ Context-aware Chunking
+- ✅ Hybrid Retrieval
+- ✅ Cross Encoder Re-ranking
+- ✅ Context Compression
+- ✅ Conversation Memory
+- ✅ Source Citations
+- ✅ Dynamic File Uploads
+- ✅ Dockerized Deployment
+- ✅ Hugging Face Spaces Ready
+
+---
+
+# 🔮 Future Improvements
+
+- Model Context Protocol (MCP) Integration
+- Authentication & User Accounts
+- PostgreSQL / MySQL Support
+- Cloud Vector Databases (Pinecone/Qdrant)
+- OCR Support for Scanned PDFs
+- Multi-modal Document Understanding
+- Multi-user Workspace Support
+
+---
+
+# 📄 License
+
+This project is licensed under the **MIT License**.
+
+---
+
+# ⭐ If you found this project useful, consider giving it a Star!
+
+It helps others discover the project and motivates future improvements.
